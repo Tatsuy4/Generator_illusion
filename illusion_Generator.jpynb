@@ -21,19 +21,7 @@ import math
 %pip install tensorboard-chainer
 %pip install -U PyYAML
 %pip install 'cupy-cuda116'
-★Generatorの定義★
 
-全結合層
-
-ReLU関数
-
-畳み込み層①
-
-ReLU関数
-
-畳み込み層②
-
-シグモイド関数
 #Generatorの定義
 class Generator(nn.Module):
 
@@ -120,8 +108,9 @@ plt.show()
 
 for param in G.parameters():
     print(param)
+    
 #画像を並べる
-#64*repeatに並べる
+#repeatの分だけ並べる
 
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -253,14 +242,7 @@ import cupy
 
 # train 
 # %run 'chainer_prednet/PredNet/call_prednet.py' --images 'your/input/frames' --g 0 --save 10000 
-# 画像表示関数
-def imshow(img):
-    img = torchvision.utils.make_grid(img)
-    img = img / 2 + 0.5
-    npimg = img.numpy()
-    plt.figure(figsize=(32, 32))
-    plt.imshow(np.transpose(npimg, (1, 2, 0)), cmap='gray')
-    plt.show()
+
 #オプティカルフローを算出・統合
 import argparse
 import csv
