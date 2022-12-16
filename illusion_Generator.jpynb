@@ -1,0 +1,500 @@
+#必要な関数の導入
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+import torchvision
+import torchvision.transforms as transforms
+
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+
+from PIL import Image
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+import math
+
+#libraries
+%pip install tensorboard-chainer
+%pip install -U PyYAML
+%pip install 'cupy-cuda116'
+★Generatorの定義★
+
+全結合層
+
+ReLU関数
+
+畳み込み層①
+
+ReLU関数
+
+畳み込み層②
+
+シグモイド関数
+#Generatorの定義
+class Generator(nn.Module):
+
+    def __init__(self, z_dim, image_size=32):
+        super(Generator, self).__init__()
+
+        #全結合層①
+        self.layer1 = nn.Sequential(
+            nn.Linear(z_dim, 2048),
+            nn.ReLU(inplace=True)
+        )
+
+
+        #全結合層②
+        self.layer2 = nn.Sequential(
+            nn.Linear(2048,256*8*8),
+            nn.ReLU(inplace=True)
+        )
+
+        #畳み込み層①(転置畳み込み)
+        self.layer3 = nn.Sequential(
+            #2*2upスケーリング時はkernel_size = 2, stride = 2, padding = 0
+            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True)
+        )
+
+        #畳み込み層②(転置畳み込み)
+        self.layer4 = nn.Sequential(
+            #sizeそのままのときは kernelsize = 3, stride = 1, padding =1
+            nn.ConvTranspose2d(128, 3, kernel_size=3, stride=1, padding=1),
+            #nn.BatchNorm2d(1),
+            nn.Tanh(),
+            #nn.Sigmoid()
+        )
+
+    def forward(self, z):
+        out = self.layer1(z)
+        out = self.layer2(out)
+        #out = out.reshape(8, 8, 256)
+        out = out.view(-1, 256, 8, 8)
+        out = self.layer3(out)
+        out = self.layer4(out)
+        #out = torch.cat([out, out, out],dim = 1)
+
+        return out
+
+#Generator動作確認
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+G = Generator(z_dim = 100)
+
+#入力する乱数
+input_z = torch.randn(100)
+
+#テンソルサイズを(1, 100, 1, 1)に変形
+#input_z = input_z.view(input_z.size(0), input_z.size(1), 1, 1)
+
+#画像を出力
+fake_images = G(input_z)
+
+print(fake_images.shape)
+
+#img = fake_images[0][0].detach().numpy()
+
+fake = torch.squeeze(fake_images)
+#new_fake = fake.reshape(35, 35, 3)
+#print(new_fake.shape)
+#print(img_transformed.shape)
+#print(img_transformed.shape)
+#t_uint8 = new_fake.to(torch.uint8)
+
+#cv2.imwrite('original.png', fake)
+#img = cv2.cvtColor(t_uint8, cv2.COLOR_BGR2RGB)
+#cv2.imshow('original',t_uint8)
+img = transforms.ToPILImage(mode="RGB")(fake)
+transform = transforms.Grayscale()
+#print(img.shape)
+plt.imshow(img)
+#plt.imshow(img_transformed,'gray')
+plt.show()
+
+
+for param in G.parameters():
+    print(param)
+#画像を並べる
+#64*repeatに並べる
+
+from PIL import Image
+import matplotlib.pyplot as plt
+%matplotlib inline
+import cv2
+import numpy as np
+
+from PIL import Image, ImageOps
+
+
+#im1 = Image.open("snakes2/input_images/sample_origin.png")
+#im2 = Image.open("snakes2/input_images/black.jpg")
+
+#画像を縦に並べ、その左に同じ長さの黒の帯をつける
+def get_concat_h(im1):
+    repeat = 10
+    n = 0 
+    dst = Image.new('RGB', (im1.width* 3, im1.height* repeat))
+    for num in range(repeat):
+       
+        dst.paste(im1, (im1.width* 2, im1.width* n))
+        n += 1
+
+    return dst
+
+#画像を極座標変換し、円形に並べる
+def polar(img):
+
+    # 逆変換(リニア)
+    flags = cv2.INTER_CUBIC + cv2.WARP_FILL_OUTLIERS + cv2.WARP_POLAR_LINEAR + cv2.WARP_INVERSE_MAP
+    img = cv2.warpPolar(img, (160, 120), (80,60), 60, flags)
+
+    return img
+
+#極座標変換したものを小さくしたものを更に２層加える
+
+def plus1_2(img, top, right, bottom, left, color):
+
+    #1/2圧縮
+    img_1_2 = img.resize((96,72))
+    width, height = img_1_2.size
+    new_width = width + right + left
+    new_height = height + top + bottom
+    result = Image.new(img.mode, (new_width, new_height), color)
+    result.paste(img_1_2, (left, top))
+    
+
+    #mirror
+    result = ImageOps.mirror(result)
+    #kaiten
+    result = result.rotate(30)
+    #img1_2 = cv2.cvtColor(img1_2, cv2.COLOR_BGR2RGB)
+
+
+    #pic1=img
+    #pic2=img1_2
+    #pic3=cv2.add(pic2,pic1)
+    
+    #(img, 24, 32, 24, 32, (0, 0, 0))
+
+    return result
+    
+def plus1_4(img, top, right, bottom, left, color):
+
+    #1/4圧縮
+    img_1_4 = img.resize((56,42))
+    width, height = img_1_4.size
+    new_width = width + right + left
+    new_height = height + top + bottom
+    result = Image.new(img.mode, (new_width, new_height), color)
+    
+    result.paste(img_1_4, (left, top))
+    #(img_1_2, 39, 52, 39, 52, (0, 0, 0))
+
+    #mirror
+    result = ImageOps.mirror(result)
+
+    #kaiten
+    result = result.rotate(60)
+    return result
+
+def plus_pic(pic1, pic2):
+    pic3=cv2.add(pic2,pic1)
+    return pic3
+
+#im1 = Image.open("snakes2/input_images/sample_origin.png")
+#get_concat_h(img).save("snakes2/input_images/obi0.png")
+#out = Image.open("snakes2/input_images/obi0.png")
+
+#out = cv2.imread("snakes2/input_images/obi0.png")
+#cv2.imwrite("snakes2/input_images/polar0.png", polar(out))
+#polar(out).save("snakes2/input_images/polar0.png")
+
+#out = Image.open("snakes2/input_images/polar0.png")
+#plus1_2(out, 24, 32, 24, 32, (0, 0, 0)).save("snakes2/input_images/polar1_2.png")
+
+#out = plus_pic(cv2.imread("snakes2/input_images/polar0.png"),cv2.imread("snakes2/input_images/polar1_2.png"))
+#cv2.imwrite('snakes2/input_images/pic0.png',np.array(out))
+
+#out = Image.open("snakes2/input_images/pic0.png")
+#plus1_4(out,39,52,39,52, (0, 0, 0)).save("snakes2/input_images/polar1_4.png")
+
+#out = plus_pic(cv2.imread("snakes2/input_images/pic0.png"),cv2.imread("snakes2/input_images/polar1_4.png"))
+#cv2.imwrite('snakes2/input_images/illusion.png',np.array(out))
+
+
+# check python version 
+# change python version through menu: Runtime -> Change runtime type
+# choose python 3 and gpu
+import sys
+print(sys.version)
+# use default input images, or
+# uncomment and change to path to your training or testing images
+!cp -r '/home/yasukawa_lab/yamada/chainer_prednet-master/chainer_prednet/snakes/input_images' "."
+import chainer
+import pycuda as cuda
+import pycuda.driver 
+import pycuda.gpuarray as gpuarray
+import cupy
+#!rm -r "/home/yasukawa_lab/yamada/chainer_prednet-master/result"
+# test predcting images 
+%run '/home/yasukawa_lab/yamada/chainer_prednet-master/PredNet/call_prednet.py' --images '/home/yasukawa_lab/yamada/chainer_prednet-master/snakes/input_images' --initmodel 'FPSI_500K.model' --input_len 1 --test --g 0
+
+# test with text mode, predict 10x
+# %run 'chainer_prednet/PredNet/call_prednet.py' --seq 'snakes/sequence_list.txt' --initmodel 'fpsi_500000_20v.model' --test --g 0
+
+# test with extended prediction 
+# %run 'chainer_prednet/PredNet/call_prednet.py' --seq 'snakes/sequence_list.txt' --initmodel 'fpsi_500000_20v.model'  --test --g 0 --ext_t 5 --ext 3
+
+# train 
+# %run 'chainer_prednet/PredNet/call_prednet.py' --images 'your/input/frames' --g 0 --save 10000 
+# 画像表示関数
+def imshow(img):
+    img = torchvision.utils.make_grid(img)
+    img = img / 2 + 0.5
+    npimg = img.numpy()
+    plt.figure(figsize=(32, 32))
+    plt.imshow(np.transpose(npimg, (1, 2, 0)), cmap='gray')
+    plt.show()
+#オプティカルフローを算出・統合
+import argparse
+import csv
+import cv2
+import itertools
+import numpy as np
+import yaml
+import os
+
+# TODO return np array
+# culu the tracks
+
+# returns image with vector tracks and vector data
+def lucas_kanade(file1, file2, output_path = "./",
+    vector_scale=60, circle_size=2, circle_color="yellow", line_width=2, line_color="red",
+    save = True):
+
+    #conf_path = os.path.dirname(os.path.abspath(__file__)) + "/config.yaml"
+    conf_path = "optical_flow/config.yaml"
+    if not os.path.exists(output_path+"/csv/"):
+        os.makedirs(output_path+"/csv/")
+
+    config = yaml.load(open(conf_path), Loader=yaml.FullLoader)
+    conf = config['LucasKanade']
+    # params for ShiTomasi corner detection
+    feature_params = dict(maxCorners = 100,
+                          qualityLevel = conf['quality_level'],
+                          minDistance = 7,
+                          blockSize = 7)
+
+    # Parameters for lucas kanade optical flow
+    lk_params = dict(winSize = (conf['window_size'],
+                                conf['window_size']),
+                     maxLevel = 2,
+                     criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
+
+    img1 = cv2.imread(file1)
+    img2 = cv2.imread(file2)
+    img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+    p0 = cv2.goodFeaturesToTrack(img1_gray, mask = None, **feature_params)
+
+    #data = []
+
+
+    
+
+    if p0 is None:
+        pass
+    else:
+        p1, st, err = cv2.calcOpticalFlowPyrLK(img1_gray, img2_gray, p0, None, **lk_params)
+        good_new = p1[st==1]
+        good_old = p0[st==1]
+
+        data = []
+
+        # gather results in array
+        for i, (new, old) in enumerate(zip(good_new, good_old)):
+            a, b = new.ravel()
+            c, d = old.ravel()
+            dx = (a - c)
+            dy = (b - d)
+
+            #data = data + dx**2 + dy**2
+            #data.append([dx*dx+dy*dy])
+            data.append([c, d, dx, dy])
+
+    #print(data)
+    return data
+            
+len = lucas_kanade('result/0000000010_extended.png', 'result/0000000014_extended.png', output_path = "./",
+    vector_scale=60, circle_size=2, circle_color="yellow", line_width=2, line_color="red",
+    save = True)
+
+#print(len)
+import numpy as np
+from numpy import linalg as LA
+
+def cosine(u,v):
+
+    i = np.inner(u, v)
+    n = LA.norm(u) * LA.norm(v)
+
+    c = i / n
+    #a = np.rad2deg(np.arccos(np.clip(c, -1.0, 1.0)))
+    return c
+
+num=0
+#
+def unify_vectors(veclist):
+    num = 0
+    q = 0
+    len2 = 0
+    veclist = np.array(veclist)
+    for i in veclist:
+        #
+        v1 = veclist[num][2]
+        v2 = veclist[num][3]
+        v = np.array([v1,v2])
+        #
+        u1 = veclist[num][0] - 80
+        u2 = veclist[num][1] - 60
+        u = np.array([u1,u2])
+        
+        c = cosine(u,v)
+        s = np.sqrt(1-c**2)
+        len2 = veclist[num][2]**2 + veclist[num][3]**2
+        q += len2
+        #if len2 > 0.2:
+            #q = q + np.sqrt(s**2/c**2)
+        num += 1
+
+    return 1/q
+    
+#ネットワークの初期化
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('ConvTranspose2d') != -1:
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
+    elif classname.find('BatchNorm') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
+    elif classname.find('linear') != -1:
+        m.bias.data.fill_(0)
+
+#初期化
+G.apply(weights_init)
+print("ネットワーク初期化完了")
+
+#学習ネットワーク
+import matplotlib
+def train_model(G, num_epochs):
+    #
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    print("使用デバイス:",device)
+    G.to(device)
+    G.train()
+    #
+    g_lr = 100
+    #beta1, beta2 = 0.0, 0.9
+    #g_optimizer = torch.optim.Adam(G.parameters(), g_lr, [beta1, beta2])
+    criterion = nn.BCEWithLogitsLoss()
+    #
+    param_G = G.parameters()
+    print(param_G)
+    optimizer = torch.optim.SGD(param_G, g_lr, momentum=0.6)
+    
+    #
+    z_dim = 100
+
+    #
+    
+    input_z = torch.randn(z_dim).to(device)
+
+    iteration = 0
+    #
+    for epoch in range(num_epochs):
+
+        #t_epoch_start = time.time()
+        epoch_loss = 0.0
+
+        print('-------------')
+        print('Epoch {}/{}'.format(epoch, num_epochs))
+        print('-------------')
+        print('  (train)  ')
+
+        #
+        #input_z = torch.randn(z_dim).to(device)
+        fake_images = G(input_z)
+        fake = torch.squeeze(fake_images)
+        img = transforms.ToPILImage(mode="RGB")(fake)
+        img.save("snakes2/input_images/unit_structure.png")
+        
+        #
+        get_concat_h(img).save("snakes2/input_images/obi0.png")
+        #
+        cv2.imwrite("snakes2/input_images/polar0.png", polar(cv2.imread("snakes2/input_images/obi0.png")))
+        #
+        out = Image.open("snakes2/input_images/polar0.png")
+        plus1_2(out, 24, 32, 24, 32, (0, 0, 0)).save("snakes2/input_images/polar1_2.png")
+        #
+        out = plus_pic(cv2.imread("snakes2/input_images/polar0.png"),cv2.imread("snakes2/input_images/polar1_2.png"))
+        cv2.imwrite('snakes2/input_images/pic0.png',np.array(out))
+        #
+        out = Image.open("snakes2/input_images/pic0.png")
+        plus1_4(out,39,52,39,52, (0, 0, 0)).save("snakes2/input_images/polar1_4.png")
+        #
+        out = plus_pic(cv2.imread("snakes2/input_images/pic0.png"),cv2.imread("snakes2/input_images/polar1_4.png"))
+        cv2.imwrite('snakes2/input_images/illusion.png',np.array(out))
+
+        # run  predictions
+        %run '/home/yasukawa_lab/yamada/chainer_prednet-master/PredNet/call_prednet.py' --seq 'snakes2/sequence_list.txt' --initmodel 'FPSI_500K.model' --test --g 0 --ext_t 10 --ext 5
+
+        # get motion vectors
+        %run '/home/yasukawa_lab/yamada/chainer_prednet-master/chainer_prednet/optical_flow/optical_flow.py' 'result/0000000010_extended.png' 'result/0000000014_extended.png' -cc yellow -lc red -s 2 -l 2 -vs 6.0
+        
+        
+        # culc optical flow len
+        len = lucas_kanade('result/0000000010_extended.png', 'result/0000000014_extended.png', output_path = "./",
+    vector_scale=60, circle_size=2, circle_color="yellow", line_width=2, line_color="red",
+    save = True)
+        
+        veclist = len['vectors']
+
+        x = unify_vectors(veclist)
+        #calculate optical flow and Quantification
+        output = torch.tensor(10*x, dtype = torch.float32, requires_grad = True)
+        target = torch.tensor(0.0, dtype = torch.float32)
+
+        #matplotlib.pyplot.plot(iteration,-10*math.log(1/(1 +np.exp(-x))), marker='.')
+        matplotlib.pyplot.plot(iteration, x, marker='.')
+        #g_loss = 0 - torch.tensor(-10*math.log(1/(1 + np.exp(-x))))
+        
+        loss = criterion(output, target)
+
+        optimizer.zero_grad()
+        #loss.requires_grad = True
+        #loss.retain_grad()
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item()
+        iteration += 1
+        print(output)
+        print(output.grad)
+
+    plt.xlabel('epochs(times)')
+    plt.ylabel('error')
+    matplotlib.pyplot.show()
+
+    return G
+    
+num_epochs = 10
+G_update = train_model(
+    G, num_epochs = num_epochs
+)
